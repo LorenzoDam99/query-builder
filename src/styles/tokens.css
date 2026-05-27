@@ -1,0 +1,37 @@
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg0:#0f1117;--bg1:#161a24;--bg2:#1e2230;--bg3:#252b3b;--bg4:#2d3347;
+  --b0:#2a3045;--b1:#3a4460;--b2:#4a5575;
+  --t0:#e2e8f5;--t1:#8e9bb8;--t2:#5a6585;--t3:#3a4260;
+  --ac:#3d8ef0;--ac2:rgba(61,142,240,0.12);--ac3:rgba(61,142,240,0.25);
+  --ok:#3dba7e;--warn:#e8a838;--err:#e05555;
+  --pk:#e8a838;--fk:#9d6ef0;--join:#3dba7e;
+  --mono:'Cascadia Code','Consolas','Courier New',monospace;
+  --sans:'Segoe UI',system-ui,sans-serif;
+  --r:7px;
+}
+html,body,#root{height:100%;overflow:hidden;background:var(--bg0);color:var(--t0);font-family:var(--sans);font-size:14px}
+
+/* Scrollbars */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--b0);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--b1)}
+
+/* Buttons */
+.btn{padding:8px 18px;border-radius:var(--r);border:none;cursor:pointer;font-size:13px;font-weight:500;transition:.15s all;font-family:var(--sans)}
+.btn-p{background:var(--ac);color:#fff}.btn-p:hover{background:#5aa0f5}
+.btn-s{background:var(--bg3);color:var(--t1);border:1px solid var(--b0)}.btn-s:hover{border-color:var(--b1);color:var(--t0)}
+.btn-sm{padding:5px 12px;font-size:11px}
+
+/* SQL highlight */
+.sql-kw{color:#569cd6}
+.sql-tb{color:#4ec9b0}
+.sql-co{color:#9cdcfe}
+.sql-st{color:#ce9178}
+.sql-nm{color:#b5cea8}
+.sql-cm{color:#6a9955}
+
+/* Empty state */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--t3);font-size:12px;gap:8px;text-align:center;padding:16px}
+.empty .ei{font-size:28px;opacity:.4;margin-bottom:4px}

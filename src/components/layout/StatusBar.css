@@ -1,0 +1,7 @@
+.status-bar{
+  height:22px;background:var(--bg1);border-top:1px solid var(--b0);
+  display:flex;align-items:center;padding:0 16px;gap:12px;
+  font-size:10.5px;color:var(--t3);flex-shrink:0;overflow:hidden;
+}
+.sdot{width:6px;height:6px;border-radius:50%;background:var(--ok);flex-shrink:0}
+.sep{color:var(--b1)}

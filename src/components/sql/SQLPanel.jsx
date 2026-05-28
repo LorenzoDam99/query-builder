@@ -86,6 +86,20 @@ export function SQLPanel({ style, isPopout = false }) {
   // null | 'history' | 'favs'
   const [sidePanel, setSidePanel] = useState(null)
   const [showDockHint, setShowDockHint] = useState(false)
+  const [histSearch, setHistSearch] = useState('')
+  const [favSearch, setFavSearch] = useState('')
+
+  // Title-bar overflow menu
+  const [showTitleMenu, setShowTitleMenu] = useState(false)
+  const titleMenuRef = useRef(null)
+  const [valCollapsed, setValCollapsed] = useState(false)
+
+  useEffect(() => {
+    if (!showTitleMenu) return
+    const handle = e => { if (!titleMenuRef.current?.contains(e.target)) setShowTitleMenu(false) }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [showTitleMenu])
 
   // Save-favorite inline form
   const [showSaveFav, setShowSaveFav] = useState(false)
@@ -100,7 +114,7 @@ export function SQLPanel({ style, isPopout = false }) {
   const panelRef = useRef(null)
 
   const isFloating = sqlDock === 'floating' && !isPopout
-  const issues = validateQuery(schema, qs)
+  const issues = validateQuery(schema, qs, dialectId)
 
   // ── History auto-save: 5s debounce + dedup ────────────────────────────────
   useEffect(() => {
@@ -247,18 +261,34 @@ export function SQLPanel({ style, isPopout = false }) {
     : undefined
 
   // ── History panel ─────────────────────────────────────────────────────────
+  const filteredHist = histSearch.trim()
+    ? histEntries.filter(e => e.code.toLowerCase().includes(histSearch.toLowerCase()))
+    : histEntries
+
   const historyPanel = (
     <div className="hist-panel">
       <div className="hist-hd">
         <span>Cronologia ({histEntries.length})</span>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {histEntries.length > 0 && <button className="hist-clear" onClick={clearHist}>Svuota</button>}
-          <button className="hist-close" onClick={() => setSidePanel(null)} title="Torna alla query">✕</button>
+          <button className="hist-close" onClick={() => { setSidePanel(null); setHistSearch('') }} title="Torna alla query">✕</button>
         </div>
       </div>
+      {histEntries.length > 0 && (
+        <div className="hist-search-wrap">
+          <input
+            className="hist-search"
+            type="text"
+            placeholder="🔍 Cerca nella cronologia…"
+            value={histSearch}
+            onChange={e => setHistSearch(e.target.value)}
+          />
+        </div>
+      )}
       <div className="hist-list">
         {histEntries.length === 0 && <div className="hist-empty">Nessuna query in cronologia.</div>}
-        {histEntries.map(e => (
+        {filteredHist.length === 0 && histSearch && <div className="hist-empty">Nessun risultato per "{histSearch}"</div>}
+        {filteredHist.map(e => (
           <div key={e.id} className="hist-item">
             <div className="hist-meta">
               <span className="hist-ts">{e.ts}</span>
@@ -380,81 +410,144 @@ export function SQLPanel({ style, isPopout = false }) {
           {isFloating && <span className="drag-grip" title="Trascina per spostare">⠿ </span>}
           {isPopout ? '⊞ ' : ''}{label}
         </h3>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-
-          {/* History toggle */}
+        {/* Overflow action menu */}
+        <div className="title-menu-wrap" ref={titleMenuRef}>
           <button
-            className={`btn btn-s btn-sm${sidePanel === 'history' ? ' active' : ''}`}
-            onClick={() => setSidePanel(p => p === 'history' ? null : 'history')}
-            title="Cronologia query"
+            className={`btn btn-s btn-sm title-menu-trigger${showTitleMenu ? ' active' : ''}`}
+            onClick={() => setShowTitleMenu(p => !p)}
+            title="Azioni pannello"
           >
-            🕑 {histEntries.length}
+            ⋯
           </button>
+          {showTitleMenu && (
+            <div className="title-menu">
 
-          {/* Favorites toggle */}
-          <button
-            className={`btn btn-s btn-sm${sidePanel === 'favs' ? ' active' : ''}`}
-            onClick={() => setSidePanel(p => p === 'favs' ? null : 'favs')}
-            title="Query preferite"
-          >
-            ⭐ {favEntries.length}
-          </button>
+              {/* ── SQL actions ── */}
+              <button className="tmenu-item" onClick={() => { copyCode(); setShowTitleMenu(false) }}>
+                <span className="tmenu-icon">📋</span>
+                Copia {dialect.supportsSQL ? 'SQL' : 'Pipeline'}
+              </button>
+              <button
+                className={`tmenu-item${showSaveFav ? ' tmenu-active' : ''}`}
+                onClick={() => { showSaveFav ? setShowSaveFav(false) : openSaveFav(); setShowTitleMenu(false) }}
+              >
+                <span className="tmenu-icon">⭐</span>
+                Salva nei preferiti
+              </button>
+              <button className="tmenu-item" onClick={() => { exportFile(); setShowTitleMenu(false) }}>
+                <span className="tmenu-icon">⬇</span>
+                Scarica .{dialectId === 'mongodb' ? 'js' : 'sql'}
+              </button>
 
-          {/* Parse SQL → builder (only SQL dialects, SELECT mode) */}
-          {dialectId !== 'mongodb' && !isPopout && (
-            <button
-              className="btn btn-s btn-sm"
-              onClick={() => { setShowParseModal(true); setParseSQLText(''); setParseError('') }}
-              title="Importa query SQL nel builder"
-            >
-              ⇥ SQL
-            </button>
-          )}
+              <div className="tmenu-sep" />
 
-          {!isPopout && !isFloating && (
-            <button
-              className="btn btn-s btn-sm"
-              onClick={detachPanel}
-              title="Stacca pannello"
-            >
-              ⊞
-            </button>
-          )}
-          {isFloating && (
-            <button
-              className="btn btn-s btn-sm"
-              onClick={dockPanel}
-              title="Aggancia a destra"
-            >
-              ⊟
-            </button>
-          )}
-          {/* Transaction wrapper toggle — only for DML in SQL dialects */}
-          {!isPopout && ['INSERT','UPDATE','DELETE'].includes(queryType) && dialectId !== 'mongodb' && (
-            <button
-              className={`btn btn-s btn-sm${wrapTransaction ? ' active' : ''}`}
-              onClick={() => setWrapTransaction(!wrapTransaction)}
-              title={wrapTransaction ? 'Rimuovi wrapper transazione' : 'Aggiungi BEGIN/COMMIT'}
-            >
-              ⚙ TX
-            </button>
-          )}
-          {!isPopout && !isFloating && (
-            <button className="btn btn-s btn-sm" onClick={resetQuery} title="Azzera la query (mantiene le tabelle nell'ERD)">Reset</button>
+              {/* ── History / favs ── */}
+              <button
+                className={`tmenu-item${sidePanel === 'history' ? ' tmenu-active' : ''}`}
+                onClick={() => { setSidePanel(p => p === 'history' ? null : 'history'); setShowTitleMenu(false) }}
+              >
+                <span className="tmenu-icon">🕑</span>
+                Cronologia
+                {histEntries.length > 0 && <span className="tmenu-badge">{histEntries.length}</span>}
+              </button>
+              <button
+                className={`tmenu-item${sidePanel === 'favs' ? ' tmenu-active' : ''}`}
+                onClick={() => { setSidePanel(p => p === 'favs' ? null : 'favs'); setShowTitleMenu(false) }}
+              >
+                <span className="tmenu-icon">🗂</span>
+                Vedi preferiti
+                {favEntries.length > 0 && <span className="tmenu-badge">{favEntries.length}</span>}
+              </button>
+
+              <div className="tmenu-sep" />
+
+              {/* ── Builder tools ── */}
+              {dialectId !== 'mongodb' && !isPopout && (
+                <button
+                  className="tmenu-item"
+                  onClick={() => { setShowParseModal(true); setParseSQLText(''); setParseError(''); setShowTitleMenu(false) }}
+                >
+                  <span className="tmenu-icon">⇥</span>
+                  Importa SQL nel builder
+                </button>
+              )}
+              {!isPopout && ['INSERT','UPDATE','DELETE'].includes(queryType) && dialectId !== 'mongodb' && (
+                <button
+                  className={`tmenu-item${wrapTransaction ? ' tmenu-active' : ''}`}
+                  onClick={() => { setWrapTransaction(!wrapTransaction); setShowTitleMenu(false) }}
+                >
+                  <span className="tmenu-icon">⚙</span>
+                  Wrapper transazione
+                  {wrapTransaction && <span className="tmenu-badge tmenu-badge-ok">ON</span>}
+                </button>
+              )}
+
+              <div className="tmenu-sep" />
+
+              {/* ── Layout / nav ── */}
+              {!isPopout && !isFloating && (
+                <button className="tmenu-item" onClick={() => { backToImport(); setShowTitleMenu(false) }}>
+                  <span className="tmenu-icon">←</span>
+                  Torna allo schema
+                </button>
+              )}
+              {!isPopout && !isFloating && (
+                <button className="tmenu-item" onClick={() => { detachPanel(); setShowTitleMenu(false) }}>
+                  <span className="tmenu-icon">⊞</span>
+                  Stacca pannello
+                </button>
+              )}
+              {isFloating && (
+                <button className="tmenu-item" onClick={() => { dockPanel(); setShowTitleMenu(false) }}>
+                  <span className="tmenu-icon">⊟</span>
+                  Aggancia a destra
+                </button>
+              )}
+
+              {/* ── Danger ── */}
+              {!isPopout && !isFloating && (
+                <>
+                  <div className="tmenu-sep" />
+                  <button
+                    className="tmenu-item tmenu-danger"
+                    onClick={() => { resetQuery(); setShowTitleMenu(false) }}
+                  >
+                    <span className="tmenu-icon">↺</span>
+                    Reset query
+                  </button>
+                </>
+              )}
+
+            </div>
           )}
         </div>
       </div>
 
       {/* Validation banner */}
-      {issues.length > 0 && (
-        <div className="val-banner">
-          {issues.map((iss, i) => (
-            <div key={i} className={`val-issue val-${iss.severity}`}>
-              {iss.severity === 'error' ? '✕' : '⚠'} {iss.message}
+      {issues.length > 0 && (() => {
+        const errCount  = issues.filter(i => i.severity === 'error').length
+        const warnCount = issues.filter(i => i.severity === 'warn').length
+        return (
+          <div className="val-banner">
+            <div className="val-banner-hd" onClick={() => setValCollapsed(c => !c)}>
+              <span className="val-banner-counts">
+                {errCount  > 0 && <span className="val-count-err">✕ {errCount} {errCount === 1 ? 'errore' : 'errori'}</span>}
+                {warnCount > 0 && <span className="val-count-warn">⚠ {warnCount} {warnCount === 1 ? 'avviso' : 'avvisi'}</span>}
+              </span>
+              <span className="val-collapse-btn">{valCollapsed ? '▼ mostra' : '▲ nascondi'}</span>
             </div>
-          ))}
-        </div>
-      )}
+            {!valCollapsed && (
+              <div className="val-issues">
+                {issues.map((iss, i) => (
+                  <div key={i} className={`val-issue val-${iss.severity}`}>
+                    {iss.severity === 'error' ? '✕' : '⚠'} {iss.message}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Main content area */}
       {sidePanel === 'history' ? historyPanel
@@ -483,25 +576,6 @@ export function SQLPanel({ style, isPopout = false }) {
 
       {/* Save-favorite inline form */}
       {saveFavForm}
-
-      {/* Actions bar */}
-      <div className="sql-actions">
-        <button className="btn btn-p btn-sm" onClick={() => copyCode()} style={{ flex: 1 }}>
-          📋 Copia {dialect.supportsSQL ? 'SQL' : 'Pipeline'}
-        </button>
-        <button
-          className="btn btn-s btn-sm"
-          onClick={showSaveFav ? () => setShowSaveFav(false) : openSaveFav}
-          title="Salva nei preferiti"
-          style={showSaveFav ? { color: 'var(--ac)' } : {}}
-        >
-          ⭐
-        </button>
-        <button className="btn btn-s btn-sm" onClick={exportFile}>⬇ .{dialectId === 'mongodb' ? 'js' : 'sql'}</button>
-        {!isPopout && !isFloating && (
-          <button className="btn btn-s btn-sm" onClick={backToImport}>← Schema</button>
-        )}
-      </div>
     </div>
   )
 

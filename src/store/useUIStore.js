@@ -3,6 +3,7 @@ import { create } from 'zustand'
 export const useUIStore = create((set, get) => ({
   // screens: 'import' | 'builder'
   screen: 'import',
+  theme: 'dark',   // 'dark' | 'light'
 
   // active dialect id
   dialectId: 'sqlserver',
@@ -38,6 +39,7 @@ export const useUIStore = create((set, get) => ({
   _toastTimer: null,
 
   setScreen(screen) { set({ screen }) },
+  setTheme(t) { set({ theme: t }) },
 
   clearNeedsFit() { set({ needsFit: false }) },
 

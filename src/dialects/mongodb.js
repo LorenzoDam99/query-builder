@@ -17,10 +17,16 @@ export const mongodb = {
 
   // MongoDB doesn't have DDL — return a $jsonSchema validator snippet instead
   ddlColumnDef(col) {
-    const bsonType = /^(int|long|integer|bigint)$/i.test(col.type) ? 'int'
-      : /^(double|float|real|decimal|numeric)$/i.test(col.type) ? 'double'
-      : /^(bool|boolean)$/i.test(col.type) ? 'bool'
-      : /^(date|datetime|timestamp)$/i.test(col.type) ? 'date'
+    const t = (col.type || '').toLowerCase()
+    const bsonType =
+      col.name === '_id' || col.isPK || /^objectid$/i.test(t) ? 'objectId'
+      : /^(int|long|integer|bigint)$/i.test(t) ? 'int'
+      : /^(double|float|real|decimal|numeric|money)$/i.test(t) ? 'double'
+      : /^(bool|boolean|bit)$/i.test(t) ? 'bool'
+      : /^(date|datetime|timestamp)$/i.test(t) ? 'date'
+      : /^(array)$/i.test(t) ? 'array'
+      : /^(object|document)$/i.test(t) ? 'object'
+      : /^(bindata|binary|blob)$/i.test(t) ? 'binData'
       : 'string'
     return `"${col.name}": { bsonType: "${bsonType}"${col.nullable === false ? ', required: true' : ''} }`
   },

@@ -122,7 +122,9 @@ function fmtVal(dialect, col, raw) {
 
 export function buildSQL(dialect, schema, qs) {
   const { qTables, qCols, qConds, qGroupBy, qAggs, jTypes,
-          distinct, limit, orderBy, colAliases, qHaving, tableAliases = {} } = qs
+          distinct, limit, orderBy, colAliases, qHaving, tableAliases = {},
+          qColsOrder = [], qCustomCols = [],
+          qCTEs = [], qWindowFuncs = [], qSubqueries = [], qUnions = [] } = qs
   const { tables, relationships } = schema
   const q  = id => dialect.quoteId(id)
   // Reference a table in FROM/JOIN declaration: tbl [AS alias]
@@ -135,19 +137,44 @@ export function buildSQL(dialect, schema, qs) {
   const tableArr = [...qTables]
   const main = tableArr[0]
 
-  // SELECT parts
+  // SELECT parts — use qColsOrder when available for explicit ordering
   const selParts = []
-  tableArr.forEach(t => {
-    const cols = qCols[t] ? [...qCols[t]] : []
-    cols.forEach(c => {
-      const isAggCol = qAggs.some(a => a.col === `${t}.${c}`)
-      if (!isAggCol) {
-        const alias = colAliases[`${t}.${c}`]
-        selParts.push(alias
-          ? `${qa(t)}.${q(c)} AS ${q(alias)}`
-          : `${qa(t)}.${q(c)}`)
-      }
-    })
+  const orderedKeys = qColsOrder.length > 0
+    ? qColsOrder.filter(key => {
+        const dot = key.indexOf('.')
+        const t = key.slice(0, dot), c = key.slice(dot + 1)
+        return qTables.has(t) && qCols[t]?.has(c)
+      })
+    : tableArr.flatMap(t => (qCols[t] ? [...qCols[t]] : []).map(c => `${t}.${c}`))
+
+  orderedKeys.forEach(key => {
+    const dot = key.indexOf('.')
+    const t = key.slice(0, dot), c = key.slice(dot + 1)
+    const isAggCol = qAggs.some(a => a.col === key)
+    if (!isAggCol) {
+      const alias = colAliases[key]
+      selParts.push(alias
+        ? `${qa(t)}.${q(c)} AS ${q(alias)}`
+        : `${qa(t)}.${q(c)}`)
+    }
+  })
+  // Calculated expression columns
+  qCustomCols.filter(cc => cc.expr?.trim()).forEach(cc => {
+    selParts.push(cc.alias?.trim()
+      ? `${cc.expr} AS ${q(cc.alias.trim())}`
+      : cc.expr)
+  })
+  // Window functions: FUNC(col) OVER (PARTITION BY ... ORDER BY ...) AS alias
+  const NO_ARG_FUNCS = new Set(['ROW_NUMBER','RANK','DENSE_RANK','CUME_DIST','PERCENT_RANK'])
+  qWindowFuncs.filter(wf => wf.func).forEach(wf => {
+    const argPart = NO_ARG_FUNCS.has(wf.func) ? '' : (wf.col?.trim() || '*')
+    const funcExpr = `${wf.func}(${argPart})`
+    const overParts = []
+    if (wf.partitionBy?.trim()) overParts.push(`PARTITION BY ${wf.partitionBy.trim()}`)
+    if (wf.orderBy?.trim())     overParts.push(`ORDER BY ${wf.orderBy.trim()}`)
+    const over = `OVER (${overParts.join(' ')})`
+    const alias = wf.alias?.trim() ? ` AS ${q(wf.alias.trim())}` : ''
+    selParts.push(`${funcExpr} ${over}${alias}`)
   })
   qAggs.forEach(a => {
     // raw=true: func contains the full expression already (e.g. ROW_NUMBER() OVER(...))
@@ -182,6 +209,19 @@ export function buildSQL(dialect, schema, qs) {
       }
     })
   }
+
+  // Derived-table subqueries in FROM
+  qSubqueries.filter(s => s.alias?.trim() && s.rawSQL?.trim()).forEach(s => {
+    const jt = s.joinType || 'LEFT JOIN'
+    const indent = s.rawSQL.trim().split('\n').join('\n        ')
+    const onClause = s.joinOn?.trim()
+      ? `\n         ON ${s.joinOn.trim()}`
+      : '\n         -- aggiungi condizione ON'
+    const entry = jt === 'CROSS JOIN'
+      ? `CROSS JOIN (\n        ${indent}\n    ) AS ${q(s.alias.trim())}`
+      : `${jt} (\n        ${indent}\n    ) AS ${q(s.alias.trim())}${onClause}`
+    joins.push(entry)
+  })
 
   // Build WHERE using aliases
   const whereParts = buildWherePartsAliased(dialect, qConds, qa)
@@ -224,7 +264,24 @@ export function buildSQL(dialect, schema, qs) {
   const limitStr = limit && dialect.limitClause(limit)
   if (limitStr) lines.push(limitStr)
 
-  return lines.join('\n')
+  let sql = lines.join('\n')
+
+  // UNION / UNION ALL — append after main SELECT
+  const validUnions = qUnions.filter(u => u.rawSQL?.trim())
+  if (validUnions.length) {
+    sql += '\n\n' + validUnions.map(u => `${u.type}\n${u.rawSQL.trim()}`).join('\n\n')
+  }
+
+  // CTE — prepend WITH clause before SELECT
+  const validCTEs = qCTEs.filter(c => c.name?.trim() && c.rawSQL?.trim())
+  if (validCTEs.length) {
+    const cteBlocks = validCTEs.map((c, i) =>
+      `${q(c.name.trim())} AS (\n    ${c.rawSQL.trim().split('\n').join('\n    ')}\n)${i < validCTEs.length - 1 ? ',' : ''}`
+    )
+    sql = `WITH ${cteBlocks.join('\n')}\n${sql}`
+  }
+
+  return sql
 }
 
 function buildInsert(dialect, schema, qs) {
@@ -563,7 +620,8 @@ export function useGeneratedCode() {
       const begin    = dialect.beginTx    || 'BEGIN'
       const commit   = dialect.commitTx   || 'COMMIT'
       const rollback = dialect.rollbackTx || 'ROLLBACK'
-      code = `${begin}\n\n${code}\n\n${commit}\n-- On error: ${rollback}`
+      const cm = dialectId === 'mongodb' ? '//' : '--'
+      code = `${begin}\n\n${code}\n\n${commit}\n${cm} On error: ${rollback}`
     }
 
     return code

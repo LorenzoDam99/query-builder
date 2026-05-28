@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useUIStore } from './useUIStore.js'
 
 const empty = () => ({
   queryType: 'SELECT',  // 'SELECT'|'INSERT'|'UPDATE'|'DELETE'|'DDL'|'MIGRATION'
@@ -27,6 +28,15 @@ const empty = () => ({
   wrapTransaction: false,
   // MongoDB pipeline stages (step 7)
   qPipelineStages: [], // [{id, type, config}]
+  // Calculated/expression columns in SELECT
+  qCustomCols: [],  // [{id, expr, alias}]
+  // Ordered list of selected column keys ("table.col") for SELECT output ordering
+  qColsOrder: [],   // string[]
+  // Advanced SQL features
+  qCTEs: [],         // [{id, name, rawSQL}]
+  qWindowFuncs: [],  // [{id, func, col, alias, partitionBy, orderBy}]
+  qSubqueries: [],   // [{id, alias, rawSQL, joinType, joinOn}]
+  qUnions: [],       // [{id, type: 'UNION'|'UNION ALL', rawSQL}]
 })
 
 export const useQueryStore = create((set, get) => ({
@@ -63,6 +73,12 @@ export const useQueryStore = create((set, get) => ({
       qParams: [],
       wrapTransaction: false,
       qPipelineStages: [],
+      qCustomCols: [],
+      qColsOrder: [],
+      qCTEs: [],
+      qWindowFuncs: [],
+      qSubqueries: [],
+      qUnions: [],
     })
   },
 
@@ -158,21 +174,113 @@ export const useQueryStore = create((set, get) => ({
       schema.tables[name]?.cols.forEach((c, i) => { if (c.isPK || i < 5) cols.add(c.name) })
       const nextCols = { ...qCols, [name]: cols }
       const nextJT = { ...jTypes }
+      const autoJoins = []
       schema.relationships.forEach(r => {
         if (next.has(r.from.table) && next.has(r.to.table)) {
           const k = `${r.from.table}>${r.to.table}`
-          if (!nextJT[k]) nextJT[k] = 'INNER'
+          if (!nextJT[k]) {
+            nextJT[k] = 'LEFT'
+            autoJoins.push(`${r.from.table} ← ${r.to.table}`)
+          }
         }
       })
+      if (autoJoins.length) {
+        setTimeout(() => useUIStore.getState().showToast(`🔗 JOIN auto-rilevato: ${autoJoins.join(', ')}`), 0)
+      }
       set({ qTables: next, qCols: nextCols, jTypes: nextJT })
     }
   },
 
   toggleCol(table, col, on) {
-    const { qCols } = get()
+    const { qCols, qColsOrder } = get()
     const s = new Set(qCols[table] || [])
-    on ? s.add(col) : s.delete(col)
+    const key = `${table}.${col}`
+    if (on) {
+      s.add(col)
+      if (!qColsOrder.includes(key)) {
+        set({ qCols: { ...qCols, [table]: s }, qColsOrder: [...qColsOrder, key] })
+        return
+      }
+    } else {
+      s.delete(col)
+      set({ qCols: { ...qCols, [table]: s }, qColsOrder: qColsOrder.filter(k => k !== key) })
+      return
+    }
     set({ qCols: { ...qCols, [table]: s } })
+  },
+
+  moveColOrder(key, dir) {
+    const order = [...get().qColsOrder]
+    const i = order.indexOf(key)
+    if (i < 0) return
+    const j = i + dir
+    if (j < 0 || j >= order.length) return
+    ;[order[i], order[j]] = [order[j], order[i]]
+    set({ qColsOrder: order })
+  },
+
+  // ── Calculated columns ────────────────────────────────────────────────────
+  addCustomCol() {
+    set({ qCustomCols: [...get().qCustomCols, { id: Date.now(), expr: '', alias: '' }] })
+  },
+  updateCustomCol(id, patch) {
+    set({ qCustomCols: get().qCustomCols.map(c => c.id === id ? { ...c, ...patch } : c) })
+  },
+  removeCustomCol(id) {
+    set({ qCustomCols: get().qCustomCols.filter(c => c.id !== id) })
+  },
+
+  // ── Drag-reorder SELECT columns ───────────────────────────────────────────
+  reorderColOrder(from, to) {
+    if (from === to) return
+    const order = [...get().qColsOrder]
+    const [item] = order.splice(from, 1)
+    order.splice(to, 0, item)
+    set({ qColsOrder: order })
+  },
+
+  // ── CTE ───────────────────────────────────────────────────────────────────
+  addCTE() {
+    set({ qCTEs: [...get().qCTEs, { id: Date.now(), name: '', rawSQL: '' }] })
+  },
+  updateCTE(id, patch) {
+    set({ qCTEs: get().qCTEs.map(c => c.id === id ? { ...c, ...patch } : c) })
+  },
+  removeCTE(id) {
+    set({ qCTEs: get().qCTEs.filter(c => c.id !== id) })
+  },
+
+  // ── Window functions ──────────────────────────────────────────────────────
+  addWindowFunc() {
+    set({ qWindowFuncs: [...get().qWindowFuncs, { id: Date.now(), func: 'ROW_NUMBER', col: '', alias: '', partitionBy: '', orderBy: '' }] })
+  },
+  updateWindowFunc(id, patch) {
+    set({ qWindowFuncs: get().qWindowFuncs.map(w => w.id === id ? { ...w, ...patch } : w) })
+  },
+  removeWindowFunc(id) {
+    set({ qWindowFuncs: get().qWindowFuncs.filter(w => w.id !== id) })
+  },
+
+  // ── Subquery in FROM (derived tables) ─────────────────────────────────────
+  addSubquery() {
+    set({ qSubqueries: [...get().qSubqueries, { id: Date.now(), alias: '', rawSQL: '', joinType: 'LEFT JOIN', joinOn: '' }] })
+  },
+  updateSubquery(id, patch) {
+    set({ qSubqueries: get().qSubqueries.map(s => s.id === id ? { ...s, ...patch } : s) })
+  },
+  removeSubquery(id) {
+    set({ qSubqueries: get().qSubqueries.filter(s => s.id !== id) })
+  },
+
+  // ── UNION / UNION ALL ─────────────────────────────────────────────────────
+  addUnion() {
+    set({ qUnions: [...get().qUnions, { id: Date.now(), type: 'UNION', rawSQL: '' }] })
+  },
+  updateUnion(id, patch) {
+    set({ qUnions: get().qUnions.map(u => u.id === id ? { ...u, ...patch } : u) })
+  },
+  removeUnion(id) {
+    set({ qUnions: get().qUnions.filter(u => u.id !== id) })
   },
 
   setJoinType(key, type) {
@@ -334,6 +442,10 @@ export const useQueryStore = create((set, get) => ({
       qHaving:      parsed.qHaving      || [],
       tableAliases: parsed.tableAliases || {},
       qParams:      parsed.qParams      || [],
+      qCTEs:        parsed.qCTEs        || [],
+      qWindowFuncs: parsed.qWindowFuncs || [],
+      qSubqueries:  parsed.qSubqueries  || [],
+      qUnions:      parsed.qUnions      || [],
     })
   },
 }))

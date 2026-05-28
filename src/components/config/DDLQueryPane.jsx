@@ -22,8 +22,8 @@ export function DDLQueryPane() {
       <div className="ddl-info-body">
         <p>
           {dialectId === 'mongodb'
-            ? `Verranno generate le definizioni <code>$jsonSchema</code> per tutte le <strong>${tableNames.length}</strong> collection caricate.`
-            : `Verranno generati gli script <strong>CREATE TABLE</strong> per tutte le <strong>${tableNames.length}</strong> tabelle dello schema caricato.`
+            ? <>Verranno generate le definizioni <code>$jsonSchema</code> per tutte le <strong>{tableNames.length}</strong> collection caricate.</>
+            : <>Verranno generati gli script <strong>CREATE TABLE</strong> per tutte le <strong>{tableNames.length}</strong> tabelle dello schema caricato.</>
           }
         </p>
         <ul className="ddl-table-list">

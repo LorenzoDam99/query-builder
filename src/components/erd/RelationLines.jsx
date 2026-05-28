@@ -77,7 +77,10 @@ function bezierPath(ax, ay, bx, by, horizontal) {
 export function RelationLines({ width, height }) {
   const { relationships } = useSchemaStore()
   const { qTables } = useQueryStore()
-  const { tablePos, erdSelected } = useUIStore()
+  const { tablePos, erdSelected, dialectId } = useUIStore()
+
+  // MongoDB has no FK relationships — skip entirely
+  if (dialectId === 'mongodb') return null
 
   const hasSelection = !!erdSelected
 

@@ -45,7 +45,14 @@ function serializeSession() {
     qParams: qs.qParams,
     wrapTransaction: qs.wrapTransaction,
     qPipelineStages: qs.qPipelineStages,
+    qCustomCols: qs.qCustomCols,
+    qColsOrder: qs.qColsOrder,
+    qCTEs: qs.qCTEs,
+    qWindowFuncs: qs.qWindowFuncs,
+    qSubqueries: qs.qSubqueries,
+    qUnions: qs.qUnions,
     dialectId: ui.dialectId,
+    theme: ui.theme,
     tablePos: ui.tablePos,
     sidebarWidth: ui.sidebarWidth,
     sqlPanelWidth: ui.sqlPanelWidth,
@@ -80,6 +87,15 @@ function restoreSession(data) {
       dmlMulti: data.dmlMulti || false,
       dmlSelectedTables: data.dmlSelectedTables || [],
       insertValsByTable: data.insertValsByTable || {},
+      qParams: data.qParams || [],
+      wrapTransaction: data.wrapTransaction || false,
+      qPipelineStages: data.qPipelineStages || [],
+      qCustomCols: data.qCustomCols || [],
+      qColsOrder: data.qColsOrder || [],
+      qCTEs: data.qCTEs || [],
+      qWindowFuncs: data.qWindowFuncs || [],
+      qSubqueries: data.qSubqueries || [],
+      qUnions: data.qUnions || [],
     })
     useUIStore.setState({
       dialectId: data.dialectId || 'sqlserver',
@@ -91,8 +107,16 @@ function restoreSession(data) {
       sqlDock: data.sqlDock || 'docked',
       floatPos: data.floatPos || { x: 0, y: 60 },
       erdHidden: new Set(data.erdHidden || []),
+      theme: data.theme || 'dark',
     })
   } catch (_) { /* ignore corrupt data */ }
+}
+
+function useTheme() {
+  const theme = useUIStore(s => s.theme)
+  useEffect(() => {
+    document.documentElement.classList.toggle('light', theme === 'light')
+  }, [theme])
 }
 
 function useSessionPersist() {
@@ -135,6 +159,7 @@ function MainApp() {
   const screen = useUIStore(s => s.screen)
   useSessionPersist()
   useBroadcast()
+  useTheme()
 
   return (
     <>

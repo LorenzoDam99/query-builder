@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { useSchemaStore } from '../../store/useSchemaStore.js'
 import { useUIStore } from '../../store/useUIStore.js'
 import { parseDDL } from '../../parsers/ddl.js'
-import { parseJSONSchema } from '../../parsers/jsonSchema.js'
+import { parseSchemaJSON } from '../../parsers/jsonSchema.js'
 
 export function MigrationPane() {
   const { tables, relationships, baseSchema, setBaseSchema, clearBaseSchema } = useSchemaStore()
@@ -20,7 +20,7 @@ export function MigrationPane() {
       try {
         let parsed
         if (text.startsWith('[') || text.startsWith('{')) {
-          parsed = parseJSONSchema(JSON.parse(text))
+          parsed = parseSchemaJSON(JSON.parse(text))
         } else {
           parsed = parseDDL(text)
         }
@@ -40,7 +40,7 @@ export function MigrationPane() {
       let parsed
       const t = text.trim()
       if (t.startsWith('[') || t.startsWith('{')) {
-        parsed = parseJSONSchema(JSON.parse(t))
+        parsed = parseSchemaJSON(JSON.parse(t))
       } else {
         parsed = parseDDL(t)
       }

@@ -51,13 +51,33 @@ function buildCreateTable(dialect, tableName, table) {
   return lines.join('\n')
 }
 
+function buildIndexes(dialect, schema) {
+  if (dialect.id === 'mongodb') return []
+  const q = id => dialect.quoteId(id)
+  const lines = []
+  const seen = new Set()
+  ;(schema.relationships || []).forEach(r => {
+    // Index on the FK column (child side)
+    const key = `${r.from.table}.${r.from.col}`
+    if (seen.has(key)) return
+    seen.add(key)
+    const idxName = `IX_${r.from.table.replace(/\s+/g,'_')}_${r.from.col}`
+    lines.push(`CREATE INDEX ${q(idxName)}\n  ON ${q(r.from.table)} (${q(r.from.col)})`)
+  })
+  return lines
+}
+
 export function buildDDL(dialect, schema) {
   const tableNames = Object.keys(schema.tables || {})
   if (!tableNames.length) return '-- Nessuno schema caricato\n-- Importa uno schema DDL o JSON prima di usare questo modo'
 
   const blocks = tableNames.map(name => buildCreateTable(dialect, name, schema.tables[name]))
-  const sep = dialect.id === 'mongodb' ? '\n\n' : '\n\n'
-  return blocks.join(sep)
+  const indexes = buildIndexes(dialect, schema)
+  const sep = '\n\n'
+  const ddl = blocks.join(sep)
+  if (!indexes.length) return ddl
+  const cm = '--'
+  return ddl + '\n\n' + cm + ' Indexes\n' + indexes.join('\n')
 }
 
 // Re-export for use in schemaDiff

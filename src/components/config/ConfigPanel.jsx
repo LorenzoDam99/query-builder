@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useUIStore } from '../../store/useUIStore.js'
 import { useQueryStore } from '../../store/useQueryStore.js'
 import { ColumnsPane } from './ColumnsPane.jsx'
@@ -9,6 +10,7 @@ import { DMLPane } from './DMLPane.jsx'
 import { DDLQueryPane } from './DDLQueryPane.jsx'
 import { MigrationPane } from './MigrationPane.jsx'
 import { MongoStagesPane } from './MongoStagesPane.jsx'
+import { AdvancedPane } from './AdvancedPane.jsx'
 import './ConfigPanel.css'
 
 const SELECT_TABS = [
@@ -17,6 +19,7 @@ const SELECT_TABS = [
   { id: 'where',    label: 'WHERE' },
   { id: 'groupby',  label: 'GROUP BY' },
   { id: 'orderby',  label: 'ORDER BY' },
+  { id: 'advanced', label: 'SQL++' },
 ]
 
 const DML_TYPES   = ['INSERT', 'UPDATE', 'DELETE']
@@ -31,9 +34,16 @@ export function ConfigPanel({ style }) {
   const isDDL     = DDL_TYPES.includes(queryType)
   const isSelect  = queryType === 'SELECT'
 
-  // Tabs shown for SELECT: add Pipeline tab when MongoDB
+  // Reset pipeline tab when switching away from MongoDB
+  useEffect(() => {
+    if (!isMongo && activePanel === 'pipeline') setActivePanel('cols')
+  }, [isMongo]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Tabs shown for SELECT:
+  // - MongoDB: remove SQL++ (no CTEs/UNION) and add Pipeline
+  // - Others: keep all including SQL++
   const selectTabs = isMongo
-    ? [...SELECT_TABS, { id: 'pipeline', label: '🔧 Pipeline' }]
+    ? [...SELECT_TABS.filter(t => t.id !== 'advanced'), { id: 'pipeline', label: '🔧 Pipeline' }]
     : SELECT_TABS
 
   return (
@@ -93,6 +103,7 @@ export function ConfigPanel({ style }) {
             {activePanel === 'where'    && <WherePane />}
             {activePanel === 'groupby'  && <GroupByPane />}
             {activePanel === 'orderby'  && <OrderByPane />}
+            {activePanel === 'advanced' && <AdvancedPane />}
             {activePanel === 'pipeline' && <MongoStagesPane />}
           </div>
         </>

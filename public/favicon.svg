@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Background circle -->
+  <rect width="32" height="32" rx="7" fill="#1a1f2e"/>
+
+  <!-- Database cylinder body -->
+  <ellipse cx="16" cy="11" rx="8" ry="3" fill="#3d8ef0" opacity="0.9"/>
+  <rect x="8" y="11" width="16" height="10" fill="#2a6fd4"/>
+  <ellipse cx="16" cy="21" rx="8" ry="3" fill="#3d8ef0" opacity="0.85"/>
+
+  <!-- Middle ellipse divider -->
+  <ellipse cx="16" cy="16" rx="8" ry="3" fill="#3d8ef0" opacity="0.5"/>
+
+  <!-- Shine on top ellipse -->
+  <ellipse cx="13.5" cy="10.2" rx="3" ry="1.1" fill="white" opacity="0.25"/>
+
+  <!-- Small SQL lines inside -->
+  <line x1="12" y1="14.5" x2="20" y2="14.5" stroke="white" stroke-width="1" opacity="0.4" stroke-linecap="round"/>
+  <line x1="12" y1="17" x2="18" y2="17" stroke="white" stroke-width="1" opacity="0.3" stroke-linecap="round"/>
+</svg>

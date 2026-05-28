@@ -94,7 +94,37 @@ ORDER BY c.TABLE_NAME,c.ORDINAL_POSITION`,
   mongodb: {
     label: 'MongoDB',
     query: null,
-    instruction: 'Per MongoDB usa il tab "DDL da SSMS" e incolla uno schema JSON nel formato: [{"TABLE_NAME":"collez","COLUMN_NAME":"campo","DATA_TYPE":"string","IS_NULLABLE":"YES","IS_PK":"NO"}]',
+    instruction: (
+      <>
+        <strong>Esporta lo schema con mongosh:</strong>
+        <ol>
+          <li>Connettiti al database: <code>use nomedb</code></li>
+          <li>Esegui questo script per estrarre automaticamente la struttura:</li>
+        </ol>
+        <pre className="ddl-script-block">{`const out = [];
+db.getCollectionNames().forEach(coll => {
+  const doc = db[coll].findOne();
+  if (!doc) return;
+  Object.entries(doc).forEach(([f, v]) => {
+    out.push({
+      TABLE_NAME: coll, COLUMN_NAME: f,
+      DATA_TYPE: Array.isArray(v) ? 'array'
+        : v && typeof v === 'object' ? (v._bsontype ?? 'object')
+        : typeof v,
+      IS_NULLABLE: 'YES',
+      IS_PK: f === '_id' ? 'YES' : 'NO'
+    });
+  });
+});
+print(JSON.stringify(out, null, 2));`}</pre>
+        <ol start={3}>
+          <li>Copia l'output JSON e incollalo nella textarea qui sopra</li>
+        </ol>
+        <p style={{ marginTop: 6, color: 'var(--t1)', fontSize: 11.5 }}>
+          In alternativa usa <strong>MongoDB Compass</strong> → tab <em>Schema</em> per ispezionare i campi, poi costruisci il JSON manualmente.
+        </p>
+      </>
+    ),
   },
 }
 

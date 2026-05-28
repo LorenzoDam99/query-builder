@@ -60,6 +60,20 @@ textarea::placeholder{color:var(--t3)}
 }
 .schema-banner strong{color:var(--t0)}
 
+.ddl-script-block{
+  background:var(--bg0);
+  border:1px solid var(--b0);
+  border-radius:6px;
+  padding:10px 12px;
+  font-family:var(--mono);
+  font-size:10.5px;
+  color:var(--t1);
+  line-height:1.7;
+  white-space:pre;
+  overflow-x:auto;
+  margin:8px 0;
+}
+
 .replace-warning{
   background:rgba(232,168,56,.08);border:1px solid rgba(232,168,56,.25);
   border-radius:6px;padding:8px 12px;font-size:11.5px;color:var(--warn);

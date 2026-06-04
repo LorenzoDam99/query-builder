@@ -47,25 +47,41 @@ export function parseDDL(raw) {
     for (const part of splitComma(body)) {
       const line = part.trim()
       if (!line) continue
-      if (/(?:CONSTRAINT\s+\S+\s+)?PRIMARY\s+KEY/i.test(line)) {
-        const pm = line.match(/\(([^)]+)\)/)
+
+      // ── Table-level PRIMARY KEY constraint ──────────────────────────────
+      // Only matches when the chunk STARTS with PRIMARY KEY or CONSTRAINT … PRIMARY KEY
+      // (not when PRIMARY KEY appears inline after a column name/type)
+      if (/^\s*(?:CONSTRAINT\s+\S+\s+)?PRIMARY\s+KEY/i.test(line)) {
+        const pm = line.match(/PRIMARY\s+KEY\s*\(([^)]+)\)/i)
         if (pm) pm[1].split(',').forEach(c => pkSet.add(clean(c)))
         continue
       }
-      if (/FOREIGN\s+KEY/i.test(line)) {
-        const fm = line.match(/FOREIGN\s+KEY\s*\(\s*([^)]+)\s*\)\s*REFERENCES\s+(?:\[?[\w\s]+\]?\s*\.\s*)?\[?([\w\s]+)\]?\s*\(\s*([^)]+)\s*\)/i)
+
+      // ── Table-level FOREIGN KEY constraint ──────────────────────────────
+      if (/^\s*(?:CONSTRAINT\s+\S+\s+)?FOREIGN\s+KEY/i.test(line)) {
+        const fm = line.match(/FOREIGN\s+KEY\s*\(\s*([^)]+)\s*\)\s*REFERENCES\s+(?:[\w]+\s*\.\s*)?([\w]+)\s*\(\s*([^)]+)\s*\)/i)
         if (fm) rels.push({ from: { table: tname, col: clean(fm[1]) }, to: { table: clean(fm[2]), col: clean(fm[3]) } })
         continue
       }
+
+      // ── Other table-level constraints (UNIQUE, CHECK, INDEX) ─────────────
       if (/^\s*(?:CONSTRAINT|UNIQUE|CHECK|INDEX)\s/i.test(line)) continue
+
+      // ── Column definition ────────────────────────────────────────────────
       const cm = line.match(/^\[?([\w\s]+?)\]?\s+\[?([\w]+)\]?(?:\s*\([^)]*\))?/)
       if (cm) {
         const cn = clean(cm[1])
         if (!cn || ['CONSTRAINT','PRIMARY','FOREIGN','UNIQUE','CHECK','INDEX','WITH'].includes(cn.toUpperCase())) continue
         const rawType = cm[2].trim()
+
         // PostgreSQL SERIAL types: treat as int + identity
         const isSerial = /^(smallserial|serial|bigserial)$/i.test(rawType)
         const extras = parseColExtras(line)
+
+        // Inline PRIMARY KEY (e.g. col_name type NOT NULL\n    primary key,)
+        const hasPKInline = /\bPRIMARY\s+KEY\b/i.test(line)
+        if (hasPKInline) pkSet.add(cn)
+
         cols.push({
           name: cn,
           type: isSerial ? 'int' : rawType,
@@ -77,12 +93,24 @@ export function parseDDL(raw) {
           isGuid: extras.isGuid,
           defaultVal: extras.defaultVal,
         })
+
+        // Inline REFERENCES (PostgreSQL: col type REFERENCES schema.table [(col)])
+        // Handles both:
+        //   col type REFERENCES table (col)
+        //   col type REFERENCES schema.table    ← no explicit col, defaults to same name
+        const refMatch = line.match(/\bREFERENCES\s+(?:[\w]+\s*\.\s*)?([\w]+)\s*(?:\(\s*([\w]+)\s*\))?/i)
+        if (refMatch) {
+          const toTable = clean(refMatch[1])
+          const toCol   = refMatch[2] ? clean(refMatch[2]) : cn   // default: same col name
+          rels.push({ from: { table: tname, col: cn }, to: { table: toTable, col: toCol } })
+        }
       }
     }
     pkSet.forEach(pk => { const c = cols.find(x => x.name === pk); if (c) c.isPK = true })
     tables[tname] = { name: tname, cols }
   }
 
+  // ── ALTER TABLE … ADD FOREIGN KEY (works for SQL Server / explicit style) ──
   const fkRe = /ALTER\s+TABLE\s+(?:\[?[\w\s]+\]?\s*\.\s*)?\[?([\w\s]+?)\]?\s+(?:WITH\s+\w+\s+)?ADD\s+(?:CONSTRAINT\s+\S+\s+)?FOREIGN\s+KEY\s*\(\s*\[?([\w\s]+?)\]?\s*\)\s*REFERENCES\s+(?:\[?[\w\s]+\]?\s*\.\s*)?\[?([\w\s]+?)\]?\s*\(\s*\[?([\w\s]+?)\]?\s*\)/gi
   while ((m = fkRe.exec(sql)) !== null) {
     const ft = clean(m[1]), fc = clean(m[2]), tt = clean(m[3]), tc = clean(m[4])
